@@ -19,10 +19,10 @@
         .glass-card { background: #ffffff; border-radius: 1.25rem; border: 2px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
         .tab-active { border-bottom: 5px solid #0284c7; color: #0284c7 !important; font-weight: 900 !important; }
         input, select, textarea { background: #ffffff; border: 2px solid #cbd5e1; border-radius: 0.75rem; padding: 1rem; width: 100%; font-weight: 600; }
-        #trip-title { background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.2); color: white; font-size: 1.4rem; font-weight: 800; text-align: center; border-radius: 0.75rem; resize: none; }
-        .btn-primary { background: #0284c7; color: white; font-weight: 800; padding: 1rem; border-radius: 1rem; width: 100%; text-transform: uppercase; }
+        #trip-title { background: rgba(255, 255, 255, 0.15); border: 2px solid rgba(255, 255, 255, 0.2); color: white; font-size: 1.4rem; font-weight: 800; text-align: center; border-radius: 0.75rem; resize: none; overflow: hidden; }
+        .btn-primary { background: #0284c7; color: white; font-weight: 800; padding: 1rem; border-radius: 1rem; width: 100%; text-transform: uppercase; cursor: pointer; border: none; }
         .label-text { font-size: 0.75rem; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 0.3rem; display: block; }
-        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 85vh; }
+        .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; min-height: 85vh; padding: 2rem; }
     </style>
 </head>
 <body class="p-4 md:p-8 pb-32">
@@ -30,12 +30,12 @@
     <div class="max-w-3xl mx-auto">
         <header id="app-header" class="bg-gradient-to-br from-sky-700 to-indigo-600 p-5 rounded-[1.5rem] text-white shadow-xl mb-6 hidden">
             <div class="flex flex-col gap-3">
-                <textarea id="trip-title" placeholder="Nombre del viaje..." rows="1" onblur="window.actualizarTitulo(this.value)"></textarea>
+                <textarea id="trip-title" placeholder="Nombre del viaje..." rows="1" oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'" onblur="window.actualizarTitulo(this.value)"></textarea>
                 <div class="flex justify-between items-center bg-white/10 p-4 rounded-xl border border-white/10">
-                    <div class="text-[10px] font-black uppercase opacity-80">Inversión Total</div>
+                    <div class="text-[10px] font-black uppercase opacity-80">Gasto Total</div>
                     <div id="total-trip" class="text-2xl font-black">0.00€</div>
                 </div>
-                <button onclick="window.cerrarViaje()" class="w-full py-2 bg-rose-500/20 border border-rose-500/30 rounded-lg text-[10px] font-black uppercase">Finalizar Viaje</button>
+                <button onclick="window.cerrarViaje()" class="w-full py-2 bg-rose-500/20 border border-rose-500/30 rounded-lg text-[10px] font-black uppercase">Finalizar y Cerrar Viaje</button>
             </div>
         </header>
 
@@ -49,6 +49,7 @@
         <section id="sec-vacio" class="empty-state">
             <div class="bg-sky-100 text-sky-600 p-6 rounded-full mb-6 text-4xl">✈️</div>
             <h1 class="text-2xl font-black text-slate-800 mb-2">Mis Gastos de Viaje</h1>
+            <p class="text-slate-500 mb-8 font-medium">Crea un viaje nuevo para empezar.</p>
             <button onclick="window.crearNuevoViaje()" class="btn-primary max-w-xs">Nuevo Viaje</button>
             <button onclick="window.switchTab('lista-viajes')" class="mt-4 font-black text-sky-700 text-xs uppercase">Ver Historial</button>
         </section>
@@ -61,17 +62,21 @@
                         <input type="number" step="0.01" id="gasto-importe" placeholder="Importe €" required>
                         <input type="date" id="gasto-fecha" required>
                     </div>
-                    <label class="flex items-center gap-2 p-3 bg-slate-50 rounded-xl text-[10px] font-black uppercase border border-slate-100">
-                        <input type="checkbox" id="gasto-acuenta"> <span>Pago "A cuenta" (Abona deuda propia)</span>
-                    </label>
                     <div class="grid grid-cols-2 gap-3">
                         <select id="gasto-pagador"></select>
                         <select id="gasto-categoria">
                             <option>Comida</option><option>Transporte</option><option>Alojamiento</option><option>Ocio</option><option>Otros</option>
                         </select>
                     </div>
+                    <div>
+                        <label class="label-text">Foto Ticket</label>
+                        <input type="file" id="gasto-ticket" accept="image/*" onchange="window.handleImageUpload(event)" class="text-xs">
+                        <div id="ticket-preview-container" class="mt-2 hidden">
+                            <img id="ticket-preview" src="" class="rounded-lg border w-full object-cover h-32">
+                        </div>
+                    </div>
                     <div id="reparto-check" class="grid grid-cols-2 gap-2"></div>
-                    <button type="submit" class="btn-primary">Guardar Gasto</button>
+                    <button type="submit" class="btn-primary mt-2">Guardar Gasto</button>
                 </form>
             </div>
             <div class="glass-card overflow-hidden">
@@ -90,51 +95,4 @@
         </section>
 
         <section id="sec-resumen" class="hidden">
-            <div class="glass-card p-5 mb-6 flex justify-center"><canvas id="chartCategorias" style="max-height: 200px;"></canvas></div>
-            <div id="balance-lista" class="glass-card p-5 mb-6 space-y-3"></div>
-            <div id="liquidacion-lista" class="glass-card p-5 bg-slate-900 text-white space-y-3 rounded-2xl"></div>
-        </section>
-
-        <section id="sec-lista-viajes" class="hidden">
-            <div id="contenedor-viajes" class="space-y-3"></div>
-        </section>
-    </div>
-
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        const firebaseConfig = {
-            apiKey: "AIzaSyDdtYa40DVdderCnpQjoQsWwWEcWeBGiHQ",
-            authDomain: "familytravel-6cc08.firebaseapp.com",
-            projectId: "familytravel-6cc08",
-            storageBucket: "familytravel-6cc08.firebasestorage.app",
-            messagingSenderId: "1073359509650",
-            appId: "1:1073359509650:web:871f7b03041a5c519dee4b"
-        };
-
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-
-        window.appState = { tripId: null, personas: [], gastos: [] };
-        let unsubscribeConfig, unsubscribeGastos, chartInstance;
-
-        // INICIALIZACIÓN
-        onAuthStateChanged(auth, async (user) => {
-            if (!user) { await signInAnonymously(auth); }
-            const savedId = localStorage.getItem('activeTripId');
-            if (savedId) { window.cargarViaje(savedId); } else { window.switchTab('vacio'); }
-            escucharTodosLosViajes();
-        });
-
-        window.switchTab = (t) => {
-            document.querySelectorAll('section').forEach(s => s.classList.add('hidden'));
-            document.querySelectorAll('nav button').forEach(b => b.classList.remove('tab-active'));
-            if (document.getElementById('sec-' + t)) document.getElementById('sec-' + t).classList.remove('hidden');
-            if (document.getElementById('tab-' + t)) document.getElementById('tab-' + t).classList.add('tab-active');
-
-            const hasTrip = !!window.appState.tripId;
-            document.getElementById('app-header').classList.toggle('hidden', !hasTrip || t === 'vacio' || t === 'lista-viajes');
-            document.getElementById('app-nav').classList.toggle('hidden', !hasTrip && t !== 'lista-viajes');
+            <div class="glass-card p-5 mb-6 flex justify-center"><canvas id="chartCategorias" style="max-height: 200px;"></canvas>
