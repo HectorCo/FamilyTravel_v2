@@ -227,16 +227,8 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch, getDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-
-        // Registro de Service Worker para PWA (Crucial para Android)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(reg => console.log('SW registrado', reg))
-                    .catch(err => console.log('Error SW', err));
-            });
-        }
+        // CORRECCIÓN: Importar desde firestore.js, no desde firebase-auth.js
+        import { getFirestore, doc, setDoc, onSnapshot, collection, updateDoc, arrayUnion, arrayRemove, deleteDoc, getDocs, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDdtYa40DVdderCnpQjoQsWwWEcWeBGiHQ",
@@ -257,7 +249,12 @@
         async function init() {
             onAuthStateChanged(auth, async (user) => {
                 if (!user) { await signInAnonymously(auth); return; }
-                window.switchTab('vacio');
+                const savedTripId = localStorage.getItem('activeTripId');
+                if (savedTripId) {
+                    window.cargarViaje(savedTripId);
+                } else {
+                    window.switchTab('vacio');
+                }
                 escucharTodosLosViajes();
             });
         }
@@ -327,7 +324,6 @@
 
         window.actualizarUI = () => {
             const { personas, gastos } = window.appState;
-            // CAMBIO: Ahora el total suma TODOS los gastos (incluidos "A cuenta")
             const total = gastos.reduce((s, g) => s + g.importe, 0);
             document.getElementById('total-trip').innerText = `${total.toFixed(2)}€`;
 
@@ -422,115 +418,4 @@
             document.getElementById('gasto-fecha').valueAsDate = new Date();
         };
 
-        window.showImage = (src) => {
-            document.getElementById('img-full').src = src;
-            document.getElementById('modal-foto').style.display = 'flex';
-        };
-
-        window.agregarPersona = async () => {
-            const n = document.getElementById('nuevo-nombre').value.trim();
-            if (n) await updateDoc(doc(db, "viajes", window.appState.tripId), { personas: arrayUnion(n) });
-            document.getElementById('nuevo-nombre').value = "";
-        };
-
-        window.eliminarPersona = async (p) => {
-            if(confirm(`¿Eliminar a ${p}?`)) await updateDoc(doc(db, "viajes", window.appState.tripId), { personas: arrayRemove(p) });
-        };
-
-        window.eliminarGasto = async (id) => {
-            if(confirm("¿Eliminar este gasto?")) await deleteDoc(doc(db, "viajes", window.appState.tripId, "gastos", id));
-        };
-
-        window.actualizarTitulo = async (t) => {
-            if(window.appState.tripId) await updateDoc(doc(db, "viajes", window.appState.tripId), { title: t });
-        };
-
-        window.cerrarViaje = async () => {
-            if (!window.appState.tripId) return;
-            if (confirm("¿Finalizar viaje? Se marcará como completado.")) {
-                await updateDoc(doc(db, "viajes", window.appState.tripId), { status: "Cerrado" });
-            }
-        };
-
-        window.eliminarViaje = async (id) => {
-            if (!confirm("Esto eliminará el viaje y TODOS sus gastos. ¿Continuar?")) return;
-            const batch = writeBatch(db);
-            const gastos = await getDocs(collection(db, "viajes", id, "gastos"));
-            gastos.forEach(d => batch.delete(d.ref));
-            batch.delete(doc(db, "viajes", id));
-            await batch.commit();
-            if (id === window.appState.tripId) {
-                window.appState.tripId = null;
-                localStorage.removeItem('activeTripId');
-                window.switchTab('vacio');
-            }
-        };
-
-        window.calcularBalances = () => {
-            const { personas, gastos } = window.appState;
-            const balance = {}; const cats = {};
-            personas.forEach(p => balance[p] = 0);
-            
-            gastos.forEach(g => {
-                // CAMBIO: Todos los gastos suman a las categorías para el gráfico
-                cats[g.categoria] = (cats[g.categoria] || 0) + g.importe;
-
-                if (!g.esACuenta) {
-                    balance[g.pagador] += g.importe;
-                    const cuota = g.importe / (g.reparto.length || 1);
-                    g.reparto.forEach(p => balance[p] -= cuota);
-                } else {
-                    // CAMBIO: A cuenta solo suma balance al pagador (limpia deuda) sin generar gasto compartido
-                    balance[g.pagador] += g.importe;
-                }
-            });
-
-            document.getElementById('balance-lista').innerHTML = `<h3 class="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-3">Balance Individual</h3>` + Object.entries(balance).map(([p, b]) => `
-                <div class="flex justify-between font-black text-xs border-b border-slate-50 py-1">
-                    <span>${p}</span>
-                    <span class="${b>=0?'text-teal-600':'text-rose-600'}">${b>=0?'+':''}${b.toFixed(2)}€</span>
-                </div>
-            `).join('');
-
-            const ctx = document.getElementById('chartCategorias').getContext('2d');
-            if(chartInstance) chartInstance.destroy();
-            chartInstance = new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: Object.keys(cats),
-                    datasets: [{ data: Object.values(cats), backgroundColor: ['#0ea5e9', '#6366f1', '#f59e0b', '#f43f5e', '#10b981', '#14b8a6'] }]
-                },
-                options: { plugins: { legend: { position: 'bottom', labels: { font: { weight: 'bold', size: 10 } } } } }
-            });
-
-            const deudores = Object.entries(balance).filter(x => x[1] < -0.01).sort((a,b)=>a[1]-b[1]);
-            const acreedores = Object.entries(balance).filter(x => x[1] > 0.01).sort((a,b)=>b[1]-a[1]);
-            let html = '<h3 class="text-[10px] font-black uppercase tracking-widest text-slate-500 mb-4">Reparto de pagos</h3>';
-            
-            let i=0, j=0;
-            const deudoresCopia = deudores.map(d => [d[0], d[1]]);
-            const acreedoresCopia = acreedores.map(a => [a[0], a[1]]);
-
-            while(i < deudoresCopia.length && j < acreedoresCopia.length){
-                const monto = Math.min(Math.abs(deudoresCopia[i][1]), acreedoresCopia[j][1]);
-                html += `<div class="text-xs font-bold py-2 border-b border-white/5 flex items-center gap-2">
-                    <span class="text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded">${deudoresCopia[i][0]}</span>
-                    <span class="opacity-40">➔</span>
-                    <span class="text-teal-400">${monto.toFixed(2)}€</span>
-                    <span class="opacity-40">➔</span>
-                    <span class="text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded">${acreedoresCopia[j][0]}</span>
-                </div>`;
-                deudoresCopia[i][1] += monto; acreedoresCopia[j][1] -= monto;
-                if(Math.abs(deudoresCopia[i][1]) < 0.01) i++;
-                if(Math.abs(acreedoresCopia[j][1]) < 0.01) j++;
-            }
-            document.getElementById('liquidacion-lista').innerHTML = html || '<p class="text-[10px] font-black opacity-30 text-center uppercase py-4">Todo saldado</p>';
-        };
-
-        window.onload = () => {
-            document.getElementById('gasto-fecha').valueAsDate = new Date();
-            init();
-        };
-    </script>
-</body>
-</html>
+        window.showImage = (src) =>
